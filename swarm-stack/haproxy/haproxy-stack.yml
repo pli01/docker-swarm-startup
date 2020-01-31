@@ -1,0 +1,42 @@
+version: '3.4'
+
+services:
+  loadbalancer:
+    image: "privateregistry/haproxytech/haproxy-debian:2.0"
+    networks:
+      - portainer_agent_network
+      - web_app
+# Add here external network
+    ports:
+      - 80:80
+#    ports:
+#      - target: 80
+#        published: 80
+#        protocol: tcp
+#        mode: host
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==swarm-manager-test-manager-0
+          - node.role==manager
+          - node.labels.leader!=true
+      replicas: 1
+      restart_policy:
+        condition: any
+    configs:
+      - source: haproxy-web
+        target: /etc/haproxy/haproxy.cfg
+        mode: 0440
+
+configs:
+  haproxy-web:
+    external:
+      name: haproxy-web
+
+networks:
+  portainer_agent_network:
+    external: true
+  web_app:
+    external:
+      name: app-network
+# Add here external network

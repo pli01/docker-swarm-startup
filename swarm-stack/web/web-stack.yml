@@ -1,0 +1,23 @@
+version: "3.4"
+ 
+services:
+  web:
+    image: "privateregistry/nginxdemos/hello"
+    networks:
+      - app
+    deploy:
+      placement:
+        constraints:
+          - node.role==worker
+      replicas: 1
+      restart_policy:
+        condition: any
+      endpoint_mode: dnsrr
+ 
+#networks:
+#  app:
+#    driver: overlay
+networks:
+  app:
+    external:
+      name: app-network
