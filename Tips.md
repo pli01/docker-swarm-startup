@@ -28,6 +28,12 @@ docker push privateregistry/portainer/portainer
 docker push privateregistry/portainer/agent
 ```
 
+* traefik
+```
+docker pull traefik:1.7
+docker tag  traefik:1.7 privateregistry/traefik:1.7
+docker push privateregistry/traefik:1.7
+```
 * haproxy
 ```
 docker pull haproxytech/haproxy-debian:2.0
@@ -60,8 +66,14 @@ docker node update --availability active swarm-manager-test-manager-1
 ```
 docker network create --opt com.docker.network.driver.mtu=1450  --driver overlay app-network
 ```
+## LB router
+### traefik 
+```
+docker login privateregistry
+docker stack deploy --compose-file=traefik.yml --with-registry-auth traefik
+```
 
-## LB router: haproxy + config
+### or haproxy + config
 ```
 docker login privateregistry
 docker config create haproxy-web haproxy.cfg

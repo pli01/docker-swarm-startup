@@ -1,12 +1,12 @@
 # docker-swarm-startup
 
-## Cluster Swarm + portainer + haproxy + webapp
+## Cluster Swarm + portainer + traefik|haproxy + webdemo
 * Ready to use swarm cluster
 * cluster swarm structure: leader+managers+workers
 * swarm stack portainer (swarm management UI)
-* swarm stack LB router to route traffic to internal container (portainer, LB(haproxy,traefik) , LBstats, and APP)
+* swarm stack LB router to route traffic to internal container (portainer, LB(traefik,haproxy) , LBstats, and APP)
 * swarm stack demo web
-* external Reverse Proxy (nginx) in front of swarm LB router (haproxy,traefik)
+* external Reverse Proxy (nginx) in front of swarm LB router (traefik,haproxy)
 
 ## Infra Provisionning
 
@@ -38,7 +38,7 @@
   * portainer agent stack
 * 2 managers
   * portainer agent stack
-  * haproxy stack (published port, ingress network)
+  * traefik stack (published port, ingress network)
 * n workers per Availibility Zone
   * portainer agent stack
   * web stack
@@ -46,4 +46,4 @@
 
 ### prereq
 
-* Push infra docker images (portainer,haproxy,traefik, nginx demo..) to private docker registry (or Swift Object) before deployment
+* Push infra docker images (portainer,traefik, nginx demo..) to private docker registry (or Swift Object) before deployment
