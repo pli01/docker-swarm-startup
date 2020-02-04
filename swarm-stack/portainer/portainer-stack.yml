@@ -7,6 +7,10 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/lib/docker/volumes:/var/lib/docker/volumes
+    environment:
+      # REQUIRED: Should be equal to the service name prefixed by "tasks." when
+      # deployed inside an overlay network
+      AGENT_CLUSTER_ADDR: tasks.agent
     networks:
       - agent_network
     deploy:
@@ -17,9 +21,9 @@ services:
   portainer:
     image: privateregistry/portainer/portainer
     command: -H tcp://tasks.agent:9001 --tlsskipverify
-    ports:
-      - "9000"
-      - "8000"
+    #    ports:
+    #      - "9000"
+    #  - "8000"
     volumes:
       - portainer_data:/data
     networks:
@@ -31,7 +35,12 @@ services:
         constraints:
           - node.hostname==swarm-leader-test-leader-0
           - node.role == manager
-
+      labels:
+        - "traefik.enable=true"
+        - "traefik.port=9000"
+        - "traefik.backend=portainer"
+        - "traefik.frontend.rule=Host:portainer"
+        - "traefik.frontend.rule=PathPrefixStrip: /portainer"
 networks:
   agent_network:
     driver: overlay

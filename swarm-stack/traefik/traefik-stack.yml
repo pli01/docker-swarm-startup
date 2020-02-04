@@ -1,0 +1,31 @@
+version: '3.4'
+
+services:
+
+  reverse-proxy:
+    image: privateregistry/traefik:1.7
+    command:
+      - "--api"
+      - "--docker"
+      - "--docker.swarmMode"
+      - "--docker.watch"
+      - "--entrypoints=Name:http Address::80 Compress:true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "80:80"
+        #      - "8088:8080"
+    networks:
+      - frontend
+      - portainer_agent_network
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - node.labels.leader!=true
+          - node.role == manager
+networks:
+  frontend:
+    driver: overlay
+  portainer_agent_network:
+    external: true
