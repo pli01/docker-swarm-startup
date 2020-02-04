@@ -1,23 +1,36 @@
 version: "3.4"
- 
+
 services:
   web:
-    image: "privateregistry/nginxdemos/hello"
+    image: privateregistry/nginxdemos/hello
     networks:
       - app
+#    ports:
+# 1)dnsrr pas de port published
+# 2)publication sur le port 8080 de tous les node
+#      - "8080:80"
+#      - "80"
+# 3) publication sur node dédie
+#      - target: 80
+#        published: 8080
+#        protocol: tcp
+#        mode: host
     deploy:
       placement:
         constraints:
           - node.role==worker
+#          - node.labels.front==true
       replicas: 1
       restart_policy:
         condition: any
       endpoint_mode: dnsrr
- 
-#networks:
-#  app:
-#    driver: overlay
+      labels:
+        - "traefik.enable=true"
+        - "traefik.port=80"
+        - "traefik.backend=web"
+        - "traefik.frontend.rule=Host:web"
+        - "traefik.frontend.rule=PathPrefixStrip: /web"
 networks:
   app:
     external:
-      name: app-network
+      name: traefik_frontend
