@@ -1,9 +1,9 @@
 # portainer-stack.yml
-version: '3.2'
+version: '3.7'
 
 services:
   agent:
-    image: privateregistry/portainer/agent
+    image: ${REGISTRY_URL:-privateregistry}/portainer/agent
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/lib/docker/volumes:/var/lib/docker/volumes
@@ -19,7 +19,7 @@ services:
         constraints: [node.platform.os == linux]
 
   portainer:
-    image: privateregistry/portainer/portainer
+    image: ${REGISTRY_URL:-privateregistry}/portainer/portainer
     command: -H tcp://tasks.agent:9001 --tlsskipverify
     #    ports:
     #      - "9000"

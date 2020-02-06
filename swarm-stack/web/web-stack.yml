@@ -1,8 +1,8 @@
-version: "3.4"
+version: "3.7"
 
 services:
   web:
-    image: privateregistry/nginxdemos/hello
+    image: ${REGISTRY_URL:-privateregistry}/nginxdemos/hello
     networks:
       - app
 #    ports:
@@ -32,5 +32,5 @@ services:
         - "traefik.frontend.rule=PathPrefixStrip: /web"
 networks:
   app:
-    external:
-      name: traefik_frontend
+    external: true
+    name: traefik-frontend

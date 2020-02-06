@@ -1,9 +1,9 @@
-version: '3.4'
+version: '3.7'
 
 services:
 
   reverse-proxy:
-    image: privateregistry/traefik:1.7
+    image: ${REGISTRY_URL:-privateregistry}/traefik:1.7
     command:
       - "--api"
       - "--accessLog"
@@ -23,8 +23,8 @@ services:
       mode: global
       placement:
         constraints:
-          - node.labels.leader!=true
           - node.role == manager
+          - node.labels.leader!=true
       labels:
         - "traefik.enable=true"
         - "traefik.port=8080"
