@@ -30,6 +30,7 @@ services:
         - "traefik.backend=web"
         - "traefik.frontend.rule=Host:web"
         - "traefik.frontend.rule=PathPrefixStrip: /web"
+        - "traefik.docker.network=traefik-frontend"
 networks:
   app:
     external: true
