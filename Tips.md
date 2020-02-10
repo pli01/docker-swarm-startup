@@ -96,3 +96,13 @@ docker service create --with-registry-auth --replicas 3 -p 80:80 --name web priv
 docker service create --with-registry-auth --mode global -p 80:80 --name web privateregistry/nginxdemos/hello
 ```
 
+## Deploy
+```
+   export REGISTRY_URL=@ip_registry
+   docker login $REGISTRY_URL
+   make STACK=portainer portainer-deploy
+   docker network create --opt com.docker.network.driver.mtu=1450  --driver overlay traefik-frontend
+   make STACK=traefik traefik-deploy
+   make STACK=web web-deploy
+```
+
