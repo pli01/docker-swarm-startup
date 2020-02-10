@@ -1,0 +1,45 @@
+# portainer-stack.yml
+version: '3.5'
+
+services:
+  registry:
+    image: ${REGISTRY_URL:-privateregistry}/registry:2
+    ports:
+     - "5000:5000"
+    environment:
+      REGISTRY_HTTP_ADDR: 0.0.0.0:5000
+      REGISTRY_STORAGE: swift
+      REGISTRY_STORAGE_MAINTENANCE_READONLY: 'enabled: true'
+      REGISTRY_STORAGE_SWIFT_AUTHURL: ${OS_AUTH_URL}
+      REGISTRY_STORAGE_SWIFT_REGION: ${OS_REGION_NAME}
+      REGISTRY_STORAGE_SWIFT_DOMAIN: ${OS_PROJECT_DOMAIN_NAME}
+      REGISTRY_STORAGE_SWIFT_USERNAME: ${OS_USERNAME}
+      REGISTRY_STORAGE_SWIFT_PASSWORD: ${OS_PASSWORD}
+      REGISTRY_STORAGE_SWIFT_TENANT: ${OS_PROJECT_NAME}
+      REGISTRY_STORAGE_SWIFT_INSECURESKIPVERIFY: "true"
+      REGISTRY_STORAGE_SWIFT_CONTAINER: docker-registry
+      REGISTRY_AUTH: htpasswd
+      REGISTRY_AUTH_HTPASSWD_REALM: "Admin Registry Realm"
+      REGISTRY_AUTH_HTPASSWD_PATH: /opt/registry/auth/users.htpasswd
+    networks:
+      - registry-network
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname==swarm-leader-test-leader-0
+          - node.role == manager
+    configs:
+      - source: registry-auth-htpasswd
+        target: /opt/registry/auth/users.htpasswd
+        mode: 0440
+
+configs:
+  registry-auth-htpasswd:
+    external: true
+networks:
+  registry-network:
+    driver: overlay
+    name: registry-network
+    attachable: true
