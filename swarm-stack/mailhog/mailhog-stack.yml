@@ -1,0 +1,34 @@
+version: "3.7"
+
+services:
+  mailhog:
+    container_name: mailhog
+    image: ${REGISTRY_URL:-privateregistry}/mailhog/mailhog
+    environment:
+      MH_UI_WEB_PATH: mailhog
+    # command: "-invite-jim -jim-accept=0.5"
+    ports:
+        - 1025
+        - 8025
+    networks:
+      - app
+    deploy:
+      placement:
+        constraints:
+          - node.role==worker
+      replicas: 1
+      restart_policy:
+        condition: any
+      # endpoint_mode: dnsrr
+      labels:
+        - "traefik.enable=true"
+        - "traefik.port=8025"
+        - "traefik.backend=mailhog"
+        - "traefik.frontend.rule=Host:mailhog"
+        - "traefik.frontend.rule=PathPrefix: /mailhog"
+        - "traefik.docker.network=traefik-frontend"
+
+networks:
+  app:
+    external: true
+    name: traefik-frontend
