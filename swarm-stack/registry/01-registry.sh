@@ -1,0 +1,16 @@
+docker run -d -p 5000:5000 \
+  --restart=always  \
+  -v $(pwd)/conf/auth/users.htpasswd:/opt/registry/auth/users.htpasswd \
+  -e "REGISTRY_STORAGE=swift" \
+  -e "REGISTRY_STORAGE_MAINTENANCE_READONLY={\"enabled\":false}" \
+  -e "REGISTRY_STORAGE_SWIFT_AUTHURL=${OS_AUTH_URL}" \
+  -e "REGISTRY_STORAGE_SWIFT_DOMAIN=${OS_PROJECT_DOMAIN_NAME}" \
+  -e "REGISTRY_STORAGE_SWIFT_USERNAME=${OS_USERNAME}" \
+  -e "REGISTRY_STORAGE_SWIFT_PASSWORD=${OS_PASSWORD}" \
+  -e "REGISTRY_STORAGE_SWIFT_TENANT=${OS_PROJECT_NAME}" \
+  -e "REGISTRY_STORAGE_SWIFT_INSECURESKIPVERIFY=true" \
+  -e "REGISTRY_STORAGE_SWIFT_CONTAINER=docker-registry" \
+  -e "REGISTRY_AUTH=htpasswd" \
+  -e "REGISTRY_AUTH_HTPASSWD_REALM='Admin Registry Realm'" \
+  -e "REGISTRY_AUTH_HTPASSWD_PATH=/opt/registry/auth/users.htpasswd" \
+  --name registry ${REGISTRY_URL}/registry:2
