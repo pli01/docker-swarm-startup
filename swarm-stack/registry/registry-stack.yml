@@ -4,12 +4,12 @@ version: '3.5'
 services:
   registry:
     image: ${REGISTRY_URL:-privateregistry}/registry:2
-#    ports:
-#     - "5000:5000"
+    #    ports:
+    # - "5000:5000"
     environment:
       REGISTRY_HTTP_ADDR: 0.0.0.0:5000
       REGISTRY_STORAGE: swift
-      REGISTRY_STORAGE_MAINTENANCE_READONLY: 'enabled: true'
+      REGISTRY_STORAGE_MAINTENANCE_READONLY: "{\"enabled\":false}"
       REGISTRY_STORAGE_SWIFT_AUTHURL: ${OS_AUTH_URL}
       REGISTRY_STORAGE_SWIFT_REGION: ${OS_REGION_NAME}
       REGISTRY_STORAGE_SWIFT_DOMAIN: ${OS_PROJECT_DOMAIN_NAME}
@@ -25,9 +25,14 @@ services:
       - registry-network
       - app
     deploy:
+      #mode: global
       mode: replicated
       replicas: 1
+      restart_policy:
+        condition: any
+      endpoint_mode: dnsrr
       placement:
+      #constraints: [node.platform.os == linux]
         constraints:
 #          - node.hostname==swarm-leader-test-leader-0
           - node.role == manager
@@ -37,7 +42,6 @@ services:
         - "traefik.backend=registry"
         - "traefik.frontend.rule=Host:registry"
         - "traefik.docker.network=traefik-frontend"
-
     configs:
       - source: registry-auth-htpasswd
         target: /opt/registry/auth/users.htpasswd
