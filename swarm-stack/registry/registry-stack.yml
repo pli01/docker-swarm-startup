@@ -9,7 +9,7 @@ services:
     environment:
       - REGISTRY_HTTP_SECRET=secret
       - REGISTRY_HTTP_ADDR=0.0.0.0:5000
-      - REGISTRY_STORAGE_MAINTENANCE_READONLY={"enabled":true}
+      - REGISTRY_STORAGE_MAINTENANCE_READONLY={"enabled":false}
       - REGISTRY_STORAGE=swift
       - REGISTRY_STORAGE_SWIFT_AUTHURL=${OS_AUTH_URL}
       - REGISTRY_STORAGE_SWIFT_REGION=${OS_REGION_NAME}
@@ -39,7 +39,7 @@ services:
         - "traefik.enable=true"
         - "traefik.port=5000"
         - "traefik.backend=registry"
-        - "traefik.frontend.rule=Host:registry"
+        - "traefik.frontend.rule=Headers: X-Hdr-01,docker-registry"
         - "traefik.docker.network=traefik-frontend"
     configs:
       - source: registry-auth-htpasswd
