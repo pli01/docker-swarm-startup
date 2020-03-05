@@ -1,0 +1,128 @@
+version: '3.5'
+services:
+  front:
+    image: ${REGISTRY_URL:-privateregistry}/ci-tool-stack/nginx:1.14
+#    configs:
+#      - source: ci-front-config-jenkins
+#        target: /etc/nginx/conf.d/default.conf
+#        mode: 0644
+#
+    networks:
+      - traefik-frontend
+      - ci-network
+    deploy:
+      placement:
+        constraints:
+          - engine.labels.availability-zone==AZ3
+          - node.role==worker
+      replicas: 1
+      restart_policy:
+        condition: any
+      endpoint_mode: dnsrr
+      labels:
+        - "traefik.enable=true"
+        - "traefik.port=80"
+        - "traefik.backend=front"
+        - "traefik.frontend.rule=Headers: X-Hdr-01,ci_front"
+        - "traefik.docker.network=traefik-frontend"
+
+  jenkins:
+    image: ${REGISTRY_URL:-privateregistry}/ci-tool-stack/jenkins:2.107.3
+    env_file:
+      - ./forge-config.env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker
+      - jenkins_data:/var/jenkins_home
+    networks:
+      - ci-network
+    deploy:
+      placement:
+        constraints:
+          - engine.labels.availability-zone==AZ3
+          - node.role==worker
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 10s
+
+  gitlab:
+    image: ${REGISTRY_URL:-privateregistry}/ci-tool-stack/gitlab-ce:10.8.6-ce.0
+    env_file:
+      - ./forge-config.env
+    volumes:
+      - gitlab_config:/etc/gitlab
+      - gitlab_logs:/var/log/gitlab
+      - gitlab_data:/var/opt/gitlab
+    networks:
+      - ci-network
+    deploy:
+      placement:
+        constraints:
+          - engine.labels.availability-zone==AZ3
+          - node.role==worker
+      replicas: 1
+      restart_policy:
+        condition: any
+
+  nexus:
+    image: ${REGISTRY_URL:-privateregistry}/ci-tool-stack/nexus3:latest
+    volumes:
+      - nexus_data:/nexus-data
+    environment:
+      NEXUS_CONTEXT: nexus
+    networks:
+      - ci-network
+    deploy:
+      placement:
+        constraints:
+          - engine.labels.availability-zone==AZ3
+          - node.role==worker
+      replicas: 1
+      endpoint_mode: dnsrr
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 10s
+        
+  service-config:
+    image: ${REGISTRY_URL:-privateregistry}/ci-tool-stack/service-config:latest
+    entrypoint: /bin/true
+    networks:
+      - ci-network
+    deploy:
+      placement:
+        constraints:
+          - engine.labels.availability-zone==AZ3
+          - node.role==worker
+      replicas: 1
+      restart_policy:
+# execute onetime (no restart)
+        condition: none
+
+volumes:
+  jenkins_data:
+    name: '{{.Service.Name}}-{{.Task.Slot}}-data'
+  gitlab_config:
+    name: '{{.Service.Name}}-{{.Task.Slot}}-config'
+  gitlab_logs:
+    name: '{{.Service.Name}}-{{.Task.Slot}}-logs'
+  gitlab_data:
+    name: '{{.Service.Name}}-{{.Task.Slot}}-data'
+  nexus_data:
+    name: '{{.Service.Name}}-{{.Task.Slot}}-data'
+
+#configs:
+#  ci-front-config-jenkins:
+#    external: true
+#
+networks:
+  ci-network:
+    external: true
+    name: ci-network
+  traefik-frontend:
+    external: true
+    name: traefik-frontend
