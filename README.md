@@ -8,6 +8,8 @@
 * swarm stack demo web
 * external Reverse Proxy (nginx) in front of swarm LB router (traefik,haproxy)
 
+[docs/swarm-startup-swarm-container-network.png](docs/swarm-startup-swarm-container-network.png)
+
 ## Infra Provisionning
 
 * Based on openstack
@@ -31,6 +33,8 @@
   * AutoScalingGroup : min 0,1,max n instances
 
 * Add external (nginx) Reverse Proxy to route trafic to portainer/traefik UI and web or app (for demo)
+
+[docs/swarm-startup-swarm-cluster-openstack.png](docs/swarm-startup-swarm-cluster-openstack.png)
 
 ### swarm cluster topology
 * 1 leader
