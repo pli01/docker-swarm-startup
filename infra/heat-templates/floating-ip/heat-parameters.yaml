@@ -1,0 +1,2 @@
+parameters:
+  floatingip_network_name: default-ext-net

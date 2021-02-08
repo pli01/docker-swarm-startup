@@ -1,0 +1,19 @@
+parameter_defaults:
+  key_name: debian
+
+  floatingip_network_name: ext-net-default
+  http_proxy_vol_size: 10
+  http_proxy_vol_type: ceph-bronze
+  http_proxy_flavor: z1.small
+  http_proxy_image: debian9-latest
+
+  ssh_access_cidr: 192.168.1.1/32
+  front_access_cidr: "172.16.12.0/22"
+  # syslog_relay: 10.1.130.55
+  no_proxy: .api.mycloud.sample
+
+  # authorized_keys to debian account
+  tinyproxy_upstream: "192.168.1.134:80"
+  tinyproxy_no_upstream: "10.1.136.246"
+  http_proxy_ip_address: 172.16.13.20
+

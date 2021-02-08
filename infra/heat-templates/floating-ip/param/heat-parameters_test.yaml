@@ -1,0 +1,2 @@
+parameter_defaults:
+  floatingip_network_name: ext-net-default

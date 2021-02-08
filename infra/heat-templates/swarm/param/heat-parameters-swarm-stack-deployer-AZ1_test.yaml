@@ -1,0 +1,23 @@
+parameter_defaults:
+  key_name: debian
+  env: test
+  front_vol_size: 50
+  front_vol_type: ceph-bronze
+  front_flavor: standard-c-1.1
+  front_image: debian9-latest
+  availability_zone: AZ1
+
+  floatingip_network_name: ext-net-default
+
+  # syslog_relay: 10.1.130.55
+  no_proxy: localhost,nexus,gitlab,10.1.136.246,.api.mycloud.sample
+  docker_repo_url: "http://mirror.dc.mydomaine.org/docker-debian"
+  docker_repo_key: "http://mirror.dc.mydomaine.org/0EBFCD88"
+  docker_version: "5:18.09.9~3-0~debian-stretch"
+  artefact_url: "https://object-store.api.mycloud.sample/v1/AUTH_83ea743765bc4661ac2f72da4b27c88d/artefacts-repo"
+  docker_compose_image: "docker-compose/1.21.2/docker-compose-Linux-x86_64"
+  #
+  registry_ip: 10.1.136.246
+  http_proxy: http://172.16.13.20:8888
+  dns_nameservers: [ '192.168.1.129', '192.168.1.130' ]
+  dns_domainname: [ 'dc.my', 'dc.mydomaine.org', 'cloud.mydomaine.org' ]

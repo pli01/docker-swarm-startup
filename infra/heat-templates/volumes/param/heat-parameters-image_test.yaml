@@ -1,0 +1,4 @@
+parameter_defaults:
+  image: debian9-latest
+  vol_size: 10
+  vol_type: ceph-bronze

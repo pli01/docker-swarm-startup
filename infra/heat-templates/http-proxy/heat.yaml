@@ -1,0 +1,237 @@
+heat_template_version: 2015-10-15
+
+description: Stack de deploiement du http-proxy
+
+parameters:
+  key_name:
+    type: string
+    label: Name of keypair to assign to servers
+    description: key_name=foo
+    constraints:
+      - {custom_constraint: nova.keypair}
+  front_network:
+    type: string
+    constraints:
+      - {custom_constraint: neutron.network}
+  front_subnet:
+    type: string
+    constraints:
+      - {custom_constraint: neutron.subnet}
+
+
+#  front_subnet_cidr:
+#    type: string
+#    default: "192.168.1.0/24"
+  ssh_access_cidr:
+    type: string
+    label: IP range that is permitted to SSH to http_proxy instance
+    description: The CIDR IP range that is permitted to SSH to http_proxy instance. Note - a value of 0.0.0.0/0 will allow access from ANY IP address.
+    default: "192.168.2.2/32"
+    constraints:
+      - {custom_constraint: net_cidr}
+
+  front_access_cidr:
+    type: string
+    label: IP range that is permitted to access to http_proxy instance
+    description: The CIDR IP range that is permitted to SSH to http_proxy instance. Note - a value of 0.0.0.0/0 will allow access from ANY IP address.
+    default: "192.168.2.2/32"
+    constraints:
+      - {custom_constraint: net_cidr}
+
+  http_proxy_ip_address:
+    type: string
+    label: fixed http_proxy IP (in front cidr)
+    description: The IP must be in the CIDR front range
+    default: "192.168.2.20"
+
+  floatingip_network_name:
+    type: string
+    label: The Floating Network
+    description: floatingip_network_name=public
+  http_proxy_flavor:
+    type: string
+    label: The flavor for http_proxy Instances
+    description: flavor=small
+    constraints:
+      - {custom_constraint: nova.flavor}
+  http_proxy_image:
+    type: string
+    label: The debian http_proxy_image based for instance
+    description: http_proxy_image=debian-8-latest
+    default: debian-8-latest
+    constraints:
+      - {custom_constraint: glance.image}
+  http_proxy_vol_size:
+    type: number
+    description: The size of the Cinder volume for instance
+    default: 10
+  source_volid:
+    type: string
+    description: The source volume id
+  http_proxy_vol_type:
+    type: string
+    description: The volume type of the Cinder volume for instance
+    default: default
+  wait_condition_timeout:
+    type: number
+    default: 600
+    description : >
+      timeout for the Wait Conditions
+  ssh_authorized_keys:
+    type: comma_delimited_list
+    label: ssh_authorized_keys
+    description: Comma separated list of keypair.
+    default: []
+
+  deploy_ssh_public_key:
+    type: string
+    label: deploy_ssh_public_key
+    description: public key
+    default: ""
+
+  syslog_relay:
+    type: string
+    label: syslog relay
+    description: syslog relay ip
+    default: ""
+
+  no_proxy:
+    type: string
+    label: no_proxy variable
+    default: ""
+
+  tinyproxy_upstream:
+    type: string
+    label: tinyproxy_upstream (proxy.corporate:8080)
+    default: ""
+  tinyproxy_no_upstream:
+    type: string
+    label: tinyproxy_no_upstream (www.direct.access)
+    default: ""
+  tinyproxy_proxy_authorization:
+    type: string
+    label: tinyproxy_proxy_authorization (base64)
+    default: ""
+
+resources:
+  # Provide a curl CLI command to the cloud-init script.  Called on completion
+  # to indicate the status of the cloud-init process
+  wait_handle:
+    type: OS::Heat::WaitConditionHandle
+
+  # Wait for the node_boot (cloud-init) process to complete or time out
+  wait_condition:
+    type: OS::Heat::WaitCondition
+    properties:
+      handle: {get_resource: wait_handle}
+      timeout: {get_param: wait_condition_timeout}
+
+  http_proxy_port:
+    type: OS::Neutron::Port
+    properties:
+      network: { get_param: front_network }
+      security_groups:
+        - { get_resource: http_proxy_node_securitygroup }
+      fixed_ips:
+        - subnet_id: { get_param: front_subnet }
+          ip_address: { get_param: http_proxy_ip_address }
+
+  http_proxy_node_securitygroup:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      rules:
+        - protocol: tcp
+          remote_ip_prefix: { get_param: ssh_access_cidr }
+          port_range_min: 22
+          port_range_max: 22
+        - protocol: tcp
+          remote_ip_prefix: { get_param: front_access_cidr }
+          port_range_min: 8888
+          port_range_max: 8888
+
+# http_proxy compute
+  http_proxy_vol:
+    type: OS::Cinder::Volume
+    properties:
+#      size: { get_param: http_proxy_vol_size }
+#      image: { get_param: http_proxy_image }
+#      volume_type: { get_param: http_proxy_vol_type }
+      volume_type: { get_param: http_proxy_vol_type }
+      source_volid: { get_param: source_volid }
+
+  http_proxy:
+    type: OS::Nova::Server
+    properties:
+      flavor: { get_param: http_proxy_flavor }
+      key_name: { get_param: key_name }
+      networks:
+        - port: { get_resource: http_proxy_port }
+      block_device_mapping:
+        - device_name: vda
+          volume_id: { get_resource: http_proxy_vol }
+          delete_on_termination: true
+      user_data_format: RAW
+      user_data: { get_resource: postinstall_http_proxy }
+      user_data_update_policy: IGNORE
+
+  http_proxy_lien_floatingip:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network: { get_param: floatingip_network_name }
+      port_id: { get_resource: http_proxy_port }
+
+  postinstall_http_proxy:
+    type: "OS::Heat::MultipartMime"
+    properties:
+      parts:
+        - config: { get_resource: included_files }
+        - config: { get_resource: http_proxy_postconf }
+        - config: { get_resource: configure_logs }
+
+  http_proxy_postconf:
+    type: "OS::Heat::SoftwareConfig"
+    properties:
+      group: ungrouped
+      config:
+        str_replace:
+          template: { get_file: config-scripts/http_proxy_postconf.sh }
+          params:
+            $ssh_authorized_keys: { get_param: ssh_authorized_keys }
+            $deploy_ssh_public_key: { get_param: deploy_ssh_public_key }
+            $no_proxy: { get_param: no_proxy }
+            $tinyproxy_upstream: { get_param: tinyproxy_upstream }
+            $tinyproxy_no_upstream: { get_param: tinyproxy_no_upstream }
+            $tinyproxy_proxy_authorization: { get_param: tinyproxy_proxy_authorization }
+
+  included_files:
+    type: "OS::Heat::CloudConfig"
+    properties:
+      cloud_config:
+        merge_how: dict(recurse_array)+list(append)
+        write_files:
+        - path: /home/debian/common_functions.sh
+          permissions: 0700
+          content:
+            str_replace:
+              params:
+                $wc_notify: {get_attr: [wait_handle, curl_cli]}
+              template: { get_file: config-scripts/common_functions.sh }
+
+  configure_logs:
+    type: "OS::Heat::SoftwareConfig"
+    properties:
+      group: ungrouped
+      config:
+        str_replace:
+          template: { get_file: config-scripts/configure_logs.sh }
+          params:
+            $syslog_relay: {get_param: syslog_relay}
+
+outputs:
+  http_proxy_id:
+    description: http_proxy id
+    value: { get_resource: http_proxy }
+  http_proxy_private_ip_address:
+    value: {get_attr: [http_proxy, networks, {get_param: front_network}, 0] }
+  http_proxy_public_ip_address:
+    value: {get_attr: [http_proxy, networks, {get_param: front_network}, 1] }

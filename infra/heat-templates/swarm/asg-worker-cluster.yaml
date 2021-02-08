@@ -1,0 +1,300 @@
+heat_template_version: 2015-10-15
+
+description: Stack de deploiement de l'infrastructure
+
+parameters:
+  min_size:
+    type: number
+    default: 0
+  desired_capacity:
+    type: number
+    default: 1
+  max_size:
+    type: number
+    default: 2
+  availability_zone:
+    type: string
+    default: ""
+  key_name:
+    type: string
+    label: Name of keypair to assign to servers
+    description: key_name=foo
+  env:
+    type: string
+    label: Environment target
+    description: env=foo
+  ssh_access_cidr:
+    type: string
+    label: IP range that is permitted to SSH to bastion instance
+    description: The CIDR IP range that is permitted to SSH to bastion instance. Note - a value of 0.0.0.0/0 will allow access from ANY IP address.
+    default: "192.168.2.2/32"
+    constraints:
+      - {custom_constraint: net_cidr}
+  node_securitygroup:
+    type: string
+
+  registry_ip:
+    type: string
+    label: registry_ip ip
+    description: registry ip
+    default: "192.168.2.2"
+
+#  floatingip_network_name:
+#    type: string
+#    label: The Floating Network
+#    description: floatingip_network_name=public
+#  floating_ip_id:
+#    type: string
+#    label: The Floating IP for Jenkins Master
+#    description: floatingip_id=public
+#    constraints:
+#      - length: { min: 36, max: 36 }
+
+  front_network:
+    type: string
+    constraints:
+      - {custom_constraint: neutron.network}
+  front_subnet:
+    type: string
+    constraints:
+      - {custom_constraint: neutron.subnet}
+
+  front_flavor:
+    type: string
+    label: The flavor for front Instances
+    description: flavor=xsmall
+    default: small
+  front_image:
+    type: string
+    label: The debian front_image based for Instances
+    description: front_image=debian-8-latest
+    default: debian-8-latest
+  front_vol_size:
+    type: number
+    description: The size of the Cinder volume for instance
+    default: 10
+  data_vol_size:
+    type: number
+    description: The size of the data Cinder volume for instance
+    default: 10
+  front_vol_type:
+    type: string
+    description: The volume type of the Cinder volume for instance
+    default: default
+  source_volid:
+    type: string
+    description: The source volume id
+  data_volume_id:
+    type: string
+    description: id for data volume created by independent stack
+    default: ""
+  docker_repo_url:
+    type: string
+    default: "https://download.docker.com/linux/debian"
+  docker_repo_key:
+    type: string
+    default: "https://download.docker.com/linux/debian/gpg"
+  docker_version:
+    type: string
+    default: "18.06.0~ce~3-0~debian"
+
+  artefact_url:
+    type: string
+    description: url to artefact storage
+    default: default
+  docker_compose_image:
+    type: string
+    description: install docker-compose.deb version
+    default: default
+  wait_condition_timeout:
+    type: number
+    default: 1200
+    description : >
+      timeout for the Wait Conditions
+
+  ssh_authorized_keys:
+    type: comma_delimited_list
+    label: ssh_authorized_keys
+    description: Comma separated list of keypair.
+    default: []
+
+  deploy_ssh_public_key:
+    type: string
+    label: deploy_ssh_public_key
+    description: public key
+    default: ""
+
+  syslog_relay:
+    type: string
+    label: syslog relay
+    description: syslog relay ip
+    default: ""
+
+  no_proxy:
+    type: string
+    label: no_proxy variable
+    default: ""
+  http_proxy:
+    type: string
+    label: http_proxy variable (http://corporate.proxy:8080)
+    default: ""
+
+  dns_nameservers:
+    type: comma_delimited_list
+    label: dns_nameservers
+    description: 8.8.8.8,8.8.4.4
+  dns_domainname:
+    type: comma_delimited_list
+    label: dns_domainname
+    description: a.tld,b.tld
+
+  swarm_token:
+    type: string
+  swarm_leader:
+    type: string
+
+
+resources:
+#  node_securitygroup_app:
+#    type: OS::Neutron::SecurityGroup
+#    properties:
+#      rules:
+#        - remote_ip_prefix: 0.0.0.0/0
+#          protocol: icmp
+#          direction: ingress
+#        # ssh
+#        - remote_ip_prefix: 0.0.0.0/0
+#          protocol: tcp
+#          direction: ingress
+#          port_range_min: 22
+#          port_range_max: 22
+#        # vxlan mgmt plane tcp 2377
+#        - remote_ip_prefix: 0.0.0.0/0
+#          protocol: tcp
+#          direction: ingress
+#          port_range_min: 2377
+#          port_range_max: 2377
+#        # vxlan data plane udp 4789
+#        - remote_ip_prefix: 0.0.0.0/0
+#          protocol: udp
+#          direction: ingress
+#          port_range_min: 4789
+#          port_range_max: 4789
+#        # vxlan control plane tcp/udp 7946
+#        - remote_ip_prefix: 0.0.0.0/0
+#          protocol: tcp
+#          direction: ingress
+#          port_range_min: 7946
+#          port_range_max: 7946
+#        - remote_ip_prefix: 0.0.0.0/0
+#          protocol: udp
+#          direction: ingress
+#          port_range_min: 7946
+#          port_range_max: 7946
+#
+  anti-affinity_group:
+   type: OS::Nova::ServerGroup
+   properties:
+    name: hosts on separate compute nodes
+    policies:
+     - anti-affinity
+
+  scale_up_policy:
+    type: OS::Heat::ScalingPolicy
+    properties:
+      adjustment_type: change_in_capacity
+      auto_scaling_group_id: {get_resource: worker}
+      cooldown: 60
+      scaling_adjustment: 1
+
+  scale_down_policy:
+    type: OS::Heat::ScalingPolicy
+    properties:
+      adjustment_type: change_in_capacity
+      auto_scaling_group_id: {get_resource: worker}
+      cooldown: 60
+      scaling_adjustment: '-1'
+
+  worker:
+    type: OS::Heat::AutoScalingGroup
+    properties:
+      min_size: { get_param: min_size }
+      desired_capacity: { get_param: desired_capacity }
+      max_size: { get_param: max_size }
+      resource: 
+        type: asg-worker.yaml
+        properties:
+          hostname:
+            str_replace:
+               template:
+                  $stack_name-worker
+               params:
+                  $stack_name: { get_param: "OS::stack_name" }
+#                  $stack_name-worker-%index%
+          key_name: { get_param: key_name }
+          ssh_access_cidr: { get_param: ssh_access_cidr }
+          #floating_ip_id: { get_param: floating_ip_id }
+          front_network: { get_param: front_network }
+          front_subnet: { get_param: front_subnet }
+          front_flavor: { get_param: front_flavor }
+          front_image: { get_param: front_image }
+          front_vol_size: { get_param: front_vol_size }
+          data_vol_size: { get_param: data_vol_size }
+          front_vol_type: { get_param: front_vol_type }
+          data_volume_id: { get_param: data_volume_id }
+          source_volid: { get_param: source_volid }
+          node_securitygroup: { get_param: node_securitygroup }
+          docker_repo_url: { get_param: docker_repo_url }
+          docker_repo_key: { get_param: docker_repo_key }
+          docker_version: { get_param: docker_version }
+          artefact_url: { get_param: artefact_url }
+          docker_compose_image: { get_param: docker_compose_image }
+          wait_condition_timeout: { get_param: wait_condition_timeout }
+          ssh_authorized_keys: { get_param: ssh_authorized_keys }
+          deploy_ssh_public_key: { get_param: deploy_ssh_public_key }
+          registry_ip: { get_param: registry_ip }
+          syslog_relay: { get_param: syslog_relay }
+          env: { get_param: env }
+          no_proxy: { get_param: no_proxy }
+          http_proxy: { get_param: http_proxy }
+          dns_nameservers: { get_param: dns_nameservers }
+          dns_domainname: { get_param: dns_domainname }
+          swarm_token: { get_param: swarm_token }
+          swarm_leader: { get_param: swarm_leader }
+          affinity_group: { get_resource: anti-affinity_group }
+          availability_zone: { get_param: availability_zone }
+
+outputs:
+  worker_id:
+    value: {get_attr: [worker, front_id] }
+# ResourceGroup
+#  worker_private_ip_address:
+#    value: {get_attr: [worker, front_private_ip_address] }
+#  worker_public_ip_address:
+#    value: {get_attr: [worker, front_public_ip_address] }
+# AutoScalingGroup
+  scale_up_url:
+    description: >
+      This URL is the webhook to scale up the group.  You can invoke
+      the scale-up operation by doing an HTTP POST to this URL; no
+      body nor extra headers are needed.
+    value: {get_attr: [scale_up_policy, alarm_url]}
+  scale_dn_url:
+    description: >
+      This URL is the webhook to scale down the group.  You can invoke
+      the scale-down operation by doing an HTTP POST to this URL; no
+      body nor extra headers are needed.
+    value: {get_attr: [scale_down_policy, alarm_url]}
+  asg_size:
+    description: >
+      This is the current size of the auto scaling group.
+    value: {get_attr: [worker, current_size]}
+  worker_server_list:
+    description: >
+      This is a list of server names that are part of the group.
+    value: {get_attr: [worker, outputs, front_name]}
+  worker_private_ip_address:
+    description: >
+      This is a list of first ip addresses of the servers in the group
+      for a specified network.
+    value: {get_attr: [worker, outputs, front_private_ip_address]}

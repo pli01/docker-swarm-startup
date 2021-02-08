@@ -1,0 +1,54 @@
+heat_template_version: 2015-10-15
+
+description: Stack de deploiement du reseau commun
+
+parameters:
+  subnet_cidr:
+    type: string
+    default: "192.168.1.0/24"
+    constraints:
+      - {custom_constraint: net_cidr}
+  dns_nameservers:
+    type: comma_delimited_list
+    label: DNS nameservers
+    description: dns_nameservers=8.8.8.8,8.8.4.4
+  floatingip_network_name:
+    type: string
+    label: The Floating Network
+    description: floatingip_network_name=public
+    constraints:
+      - {custom_constraint: neutron.network}
+
+resources:
+  router:
+    type: OS::Neutron::Router
+    properties:
+      external_gateway_info: { network: { get_param: floatingip_network_name } }
+
+  network:
+    type: OS::Neutron::Net
+
+  subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      network_id: { get_resource: network }
+      cidr: { get_param: subnet_cidr }
+      dns_nameservers: { get_param: dns_nameservers }
+      ip_version: 4
+
+  interface:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router_id: { get_resource: router }
+      subnet: { get_resource: subnet }
+
+outputs:
+  router_id:
+    description: router id
+    value: { get_resource: router }
+  net_id:
+    description: network id
+    value: { get_resource: network }
+  subnet_id:
+    description: subnet id
+    value: { get_resource: subnet }

@@ -1,0 +1,22 @@
+parameter_defaults:
+  key_name: debian
+  flavor: standard-c-1.1
+  vol_size: 5
+  vol_type: ceph-bronze
+  image: debian9-latest
+  syslog_relay: 10.1.130.55
+  floatingip_network_name: ext-net-default
+#  app_port_a.myn: "81"
+#  app_port_candidat: "80"
+
+# parametre en argument
+#  ssh_access_cidr: 192.168.1.1/32
+#  floatingip_id: "532b5cec-e426-4318-9ff1-0b4687a21918"
+# Blue
+#  color: "blue"
+#  servers: [ '10.1.135.142' ]
+# Green
+#  color: "green"
+#  servers: [ '10.1.135.151' ]
+# LB RR
+#  servers: [ '10.1.135.142', '10.1.135.151' ]

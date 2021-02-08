@@ -1,0 +1,59 @@
+heat_template_version: 2015-10-15
+
+description: Stack de deploiement de l'infrastructure
+
+parameters:
+  subnet_cidr:
+    type: string
+    default: "192.168.1.0/24"
+    constraints:
+      - {custom_constraint: net_cidr}
+  ssh_access_cidr:
+    type: string
+    label: IP range that is permitted to SSH to http_proxy instance
+    description: The CIDR IP range that is permitted to SSH to http_proxy instance. Note - a value of 0.0.0.0/0 will allow access from ANY IP address.
+    default: "192.168.2.2/32"
+    constraints:
+      - {custom_constraint: net_cidr}
+
+resources:
+  node_securitygroup:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      rules:
+        - remote_ip_prefix: 0.0.0.0/0
+          protocol: icmp
+          direction: ingress
+        # ssh
+        - remote_ip_prefix: { get_param: ssh_access_cidr }
+          protocol: tcp
+          direction: ingress
+          port_range_min: 22
+          port_range_max: 22
+        # vxlan mgmt plane tcp 2377
+        - remote_ip_prefix: { get_param: subnet_cidr }
+          protocol: tcp
+          direction: ingress
+          port_range_min: 2377
+          port_range_max: 2377
+        # vxlan data plane udp 4789
+        - remote_ip_prefix: { get_param: subnet_cidr }
+          protocol: udp
+          direction: ingress
+          port_range_min: 4789
+          port_range_max: 4789
+        # vxlan control plane tcp/udp 7946
+        - remote_ip_prefix: { get_param: subnet_cidr }
+          protocol: tcp
+          direction: ingress
+          port_range_min: 7946
+          port_range_max: 7946
+        - remote_ip_prefix: { get_param: subnet_cidr }
+          protocol: udp
+          direction: ingress
+          port_range_min: 7946
+          port_range_max: 7946
+
+outputs:
+  node_securitygroup_id:
+    value: { get_resource: node_securitygroup }

@@ -1,0 +1,12 @@
+parameter_defaults:
+  key_name: debian
+
+  bastion_vol_size: 10
+  bastion_vol_type: ceph-bronze
+  bastion_flavor: z1.small
+  bastion_image: debian9-latest
+
+  ssh_access_cidr: 192.168.1.1/32
+  # syslog_relay: 10.1.130.55
+  no_proxy: .api.mycloud.sample
+

@@ -1,0 +1,349 @@
+heat_template_version: 2015-10-15
+
+description: Stack de deploiement d une instance stack-deployer
+
+parameters:
+
+  hostname:
+    type: string
+  node_securitygroup:
+    type: string
+  swarm_token:
+    type: string
+    default: ""
+  swarm_leader:
+    type: string
+  affinity_group:
+    type: string
+  availability_zone:
+    type: string
+    default: ""
+
+  key_name:
+    type: string
+    label: Name of keypair to assign to servers
+    description: key_name=foo
+  env:
+    type: string
+    label: Environment target
+    description: env=foo
+  ssh_access_cidr:
+    type: string
+    label: IP range that is permitted to SSH to bastion instance
+    description: The CIDR IP range that is permitted to SSH to bastion instance. Note - a value of 0.0.0.0/0 will allow access from ANY IP address.
+    default: "192.168.2.2/32"
+    constraints:
+      - {custom_constraint: net_cidr}
+  registry_ip:
+    type: string
+    label: registry_ip ip
+    description: registry ip
+    default: "192.168.2.2"
+
+
+  floatingip_network_name:
+    type: string
+    label: The Floating Network
+    description: floatingip_network_name=public
+#  floating_ip_id:
+#    type: string
+#    label: The Floating IP for Jenkins Master
+#    description: floatingip_id=public
+#    constraints:
+#      - length: { min: 36, max: 36 }
+#
+
+  front_network:
+    type: string
+    constraints:
+      - {custom_constraint: neutron.network}
+  front_subnet:
+    type: string
+    constraints:
+      - {custom_constraint: neutron.subnet}
+
+  front_flavor:
+    type: string
+    label: The flavor for front Instances
+    description: flavor=xsmall
+    default: small
+  front_image:
+    type: string
+    label: The debian front_image based for Instances
+    description: front_image=debian-8-latest
+    default: debian-8-latest
+  front_vol_size:
+    type: number
+    description: The size of the Cinder volume for instance
+    default: 10
+  front_vol_type:
+    type: string
+    description: The volume type of the Cinder volume for instance
+    default: default
+  source_volid:
+    type: string
+    description: The source volume id
+  data_volume_id:
+    type: string
+    description: id for data volume created by independent stack
+    default: ""
+  docker_repo_url:
+    type: string
+    default: ""
+  docker_repo_key:
+    type: string
+    default: ""
+  docker_version:
+    type: string
+    default: ""
+
+
+  artefact_url:
+    type: string
+    description: url to artefact storage
+    default: default
+  docker_compose_image:
+    type: string
+    description: install docker-compose.deb version
+    default: default
+  wait_condition_timeout:
+    type: number
+    default: 1200
+    description : >
+      timeout for the Wait Conditions
+
+  ssh_authorized_keys:
+    type: comma_delimited_list
+    label: ssh_authorized_keys
+    description: Comma separated list of keypair.
+    default: []
+
+  deploy_ssh_public_key:
+    type: string
+    label: deploy_ssh_public_key
+    description: public key
+    default: ""
+
+  syslog_relay:
+    type: string
+    label: syslog relay
+    description: syslog relay ip
+    default: ""
+
+  no_proxy:
+    type: string
+    label: no_proxy variable
+    default: ""
+  http_proxy:
+    type: string
+    label: http_proxy variable (http://corporate.proxy:8080)
+    default: ""
+
+  dns_nameservers:
+    type: comma_delimited_list
+    label: dns_nameservers
+    description: 8.8.8.8,8.8.4.4
+  dns_domainname:
+    type: comma_delimited_list
+    label: dns_domainname
+    description: a.tld,b.tld
+
+resources:
+  # Provide a curl CLI command to the cloud-init script.  Called on completion
+  # to indicate the status of the cloud-init process
+  wait_handle:
+    type: OS::Heat::WaitConditionHandle
+
+  # Wait for the node_boot (cloud-init) process to complete or time out
+  wait_condition:
+    type: OS::Heat::WaitCondition
+    properties:
+      handle: {get_resource: wait_handle}
+      timeout: {get_param: wait_condition_timeout}
+
+  postinstall_app:
+    type: "OS::Heat::MultipartMime"
+    properties:
+      parts:
+        - config: { get_resource: included_files }
+#        - config: { get_resource: data_volume_attachment }
+        - config: { get_resource: postinstall_docker }
+        - config: { get_resource: deploy_swarm_stack_deployer }
+        - config: { get_resource: finish_postinstall }
+
+  included_files:
+    type: "OS::Heat::CloudConfig"
+    properties:
+      cloud_config:
+        merge_how: dict(recurse_array)+list(append)
+        write_files:
+        - path: /home/debian/common_functions.sh
+          permissions: 0755
+          content:
+            str_replace:
+              params:
+                $wc_notify: {get_attr: [wait_handle, curl_cli]}
+              template: { get_file: config-scripts/common_functions.sh }
+
+#  data_volume_attachment:
+#    type: "OS::Heat::SoftwareConfig"
+#    properties:
+#      group: ungrouped
+#      config:
+#        str_replace:
+#          template: { get_file: config-scripts/data_volume_attachment.sh }
+#          params:
+#            $volume_id: { get_param: data_volume_id }
+#
+#
+  postinstall_docker:
+    type: "OS::Heat::SoftwareConfig"
+    properties:
+      group: ungrouped
+      config:
+        str_replace:
+          template: { get_file: config-scripts/postinstall_docker.sh }
+          params:
+            $docker_repo_url: { get_param: docker_repo_url }
+            $docker_repo_key: { get_param: docker_repo_key }
+            $docker_version: { get_param: docker_version }
+            $artefact_url: { get_param: artefact_url }
+            $docker_compose_image: { get_param: docker_compose_image }
+            $ssh_authorized_keys: { get_param: ssh_authorized_keys }
+            $deploy_ssh_public_key: { get_param: deploy_ssh_public_key }
+            $no_proxy: { get_param: no_proxy }
+            $http_proxy: { get_param: http_proxy }
+
+  deploy_swarm_stack_deployer:
+    type: "OS::Heat::SoftwareConfig"
+    properties:
+      group: ungrouped
+      config:
+        str_replace:
+          template: { get_file: config-scripts/deploy_swarm_stack_deployer.sh }
+          params:
+            $no_proxy: { get_param: no_proxy }
+            $http_proxy: { get_param: http_proxy }
+            $registry_ip: { get_param: registry_ip }
+            $dns_nameservers: { get_param: dns_nameservers }
+            $dns_domainname: { get_param: dns_domainname }
+            $swarm_token: { get_param: swarm_token }
+            $swarm_leader: { get_param: swarm_leader }
+
+  finish_postinstall:
+    type: "OS::Heat::SoftwareConfig"
+    properties:
+      group: ungrouped
+      config:
+        str_replace:
+          template: { get_file: config-scripts/finish_postinstall.sh }
+          params:
+            $no_proxy: { get_param: no_proxy }
+
+
+
+
+#  configure_logs:
+#    type: "OS::Heat::SoftwareConfig"
+#    properties:
+#      group: ungrouped
+#      config:
+#        str_replace:
+#          template: { get_file: config-scripts/configure_logs.sh }
+#          params:
+#            $syslog_relay: {get_param: syslog_relay}
+#
+#  deploy_sup:
+#    type: "OS::Heat::SoftwareConfig"
+#    properties:
+#      group: ungrouped
+#      config:
+#        str_replace:
+#          template: { get_file: config-scripts/deploy_sup.sh }
+#          params:
+#            $env: { get_param: env }
+#            $sup_enable: { get_param: sup_enable }
+#            $sup_archive_repo: { get_param: sup_archive_repo }
+#            $sup_name: { get_param: sup_name }
+#            $sup_version: { get_param: sup_version }
+#            $no_proxy: { get_param: no_proxy }
+
+# security group
+  stack-deployer_securitygroup_app:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      rules:
+        - remote_ip_prefix: 0.0.0.0/0
+          protocol: tcp
+          direction: ingress
+          port_range_min: 80
+          port_range_max: 80
+
+  front_port:
+    type: OS::Neutron::Port
+    properties:
+      network: { get_param: front_network }
+      security_groups:
+        - { get_param: node_securitygroup }
+        - { get_resource: stack-deployer_securitygroup_app }
+      fixed_ips:
+        - subnet_id: { get_param: front_subnet }
+
+
+## Hack BUG DVR/FIP:
+#  floating_ip:
+#    type: OS::Neutron::FloatingIPAssociation
+#    properties:
+#      floatingip_id: { get_param: floating_ip_id }
+#      port_id: { get_resource: front_port }
+#
+  floating_ip:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network: { get_param: floatingip_network_name }
+      port_id: { get_resource: front_port }
+
+  front_vol:
+    type: OS::Cinder::Volume
+    properties:
+#      size: { get_param: front_vol_size }
+#      image: { get_param: front_image }
+      volume_type: { get_param: front_vol_type }
+## Boot from volume
+      source_volid: { get_param: source_volid }
+
+#  front_data_volume_attachment:
+#    type: OS::Cinder::VolumeAttachment
+#    properties:
+#      volume_id: { get_param: data_volume_id }
+#      instance_uuid: { get_resource: front }
+#
+  front:
+    type: OS::Nova::Server
+    properties:
+      name: { get_param: hostname }
+      flavor: { get_param: front_flavor }
+      key_name: { get_param: key_name }
+      scheduler_hints:
+        group: { get_param: affinity_group }
+      availability_zone: { get_param: availability_zone }
+
+      networks:
+        - port: { get_resource: front_port }
+      block_device_mapping:
+        - device_name: vda
+          volume_id: { get_resource: front_vol }
+          delete_on_termination: false
+      user_data_format: RAW
+      user_data: { get_resource: postinstall_app }
+
+outputs:
+  front_id:
+    description: stack-deployer id
+    value: { get_resource: front }
+  front_name:
+    value: {get_attr: [front, name] }
+  front_private_ip_address:
+    value: {get_attr: [front, networks, { get_param: front_network} , 0] }
+  front_public_ip_address:
+    value: {get_attr: [front, networks, { get_param: front_network} , 1] }

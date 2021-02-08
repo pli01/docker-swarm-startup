@@ -1,0 +1,252 @@
+heat_template_version: 2015-10-15
+
+description: Stack de deploiement du bastion
+
+parameters:
+  key_name:
+    type: string
+    label: Name of keypair to assign to servers
+    description: key_name=foo
+    constraints:
+      - {custom_constraint: nova.keypair}
+  front_network:
+    type: string
+    constraints:
+      - {custom_constraint: neutron.network}
+  front_subnet:
+    type: string
+    constraints:
+      - {custom_constraint: neutron.subnet}
+
+
+#  front_subnet_cidr:
+#    type: string
+#    default: "192.168.1.0/24"
+  ssh_access_cidr:
+    type: string
+    label: IP range that is permitted to SSH to bastion instance
+    description: The CIDR IP range that is permitted to SSH to bastion instance. Note - a value of 0.0.0.0/0 will allow access from ANY IP address.
+    default: "192.168.2.2/32"
+    constraints:
+      - {custom_constraint: net_cidr}
+
+
+#  dns_nameservers:
+#    type: comma_delimited_list
+#    label: DNS nameservers
+#    description: dns_nameservers=8.8.8.8,8.8.4.4
+#  floatingip_network_name:
+#    type: string
+#    label: The Floating Network
+#    description: floatingip_network_name=public
+  floatingip_id_bastion:
+    type: string
+    label: The Floating IP for Bastion NAT
+    description: floatingip_id=public
+    constraints:
+      - length: { min: 36, max: 36 }
+  bastion_flavor:
+    type: string
+    label: The flavor for bastion Instances
+    description: flavor=small
+    constraints:
+      - {custom_constraint: nova.flavor}
+  bastion_image:
+    type: string
+    label: The debian bastion_image based for instance
+    description: bastion_image=debian-8-latest
+    default: debian-8-latest
+    constraints:
+      - {custom_constraint: glance.image}
+  bastion_vol_size:
+    type: number
+    description: The size of the Cinder volume for instance
+    default: 10
+  source_volid:
+    type: string
+    description: The source volume id
+  bastion_vol_type:
+    type: string
+    description: The volume type of the Cinder volume for instance
+    default: default
+  wait_condition_timeout:
+    type: number
+    default: 600
+    description : >
+      timeout for the Wait Conditions
+  ssh_authorized_keys:
+    type: comma_delimited_list
+    label: ssh_authorized_keys
+    description: Comma separated list of keypair.
+    default: []
+
+  deploy_ssh_public_key:
+    type: string
+    label: deploy_ssh_public_key
+    description: public key
+    default: ""
+  deploy_ssh_private_key:
+    type: string
+    label: deploy_ssh_private_key
+    description: private key
+    default: ""
+
+  syslog_relay:
+    type: string
+    label: syslog relay
+    description: syslog relay ip
+    default: ""
+
+  no_proxy:
+    type: string
+    label: no_proxy variable
+    default: ""
+
+resources:
+  # Provide a curl CLI command to the cloud-init script.  Called on completion
+  # to indicate the status of the cloud-init process
+  wait_handle:
+    type: OS::Heat::WaitConditionHandle
+
+  # Wait for the node_boot (cloud-init) process to complete or time out
+  wait_condition:
+    type: OS::Heat::WaitCondition
+    properties:
+      handle: {get_resource: wait_handle}
+      timeout: {get_param: wait_condition_timeout}
+
+#  router:
+#    type: OS::Neutron::Router
+#    properties:
+#      external_gateway_info: { network: { get_param: floatingip_network_name } }
+#
+## front network
+#  front_network:
+#    type: OS::Neutron::Net
+#
+#  front_subnet:
+#    type: OS::Neutron::Subnet
+#    properties:
+#      network_id: { get_resource: front_network }
+#      cidr: { get_param: front_subnet_cidr }
+#      dns_nameservers: { get_param: dns_nameservers }
+#      ip_version: 4
+#
+#  front_interface:
+#    type: OS::Neutron::RouterInterface
+#    properties:
+#      router_id: { get_resource: router }
+#      subnet: { get_resource: front_subnet }
+#
+  bastion_port:
+    type: OS::Neutron::Port
+    properties:
+      network: { get_param: front_network }
+      security_groups:
+        - { get_resource: bastion_node_securitygroup }
+      fixed_ips:
+        - subnet_id: { get_param: front_subnet }
+
+  bastion_node_securitygroup:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      rules:
+        - protocol: tcp
+          remote_ip_prefix: { get_param: ssh_access_cidr }
+          port_range_min: 22
+          port_range_max: 22
+
+# bastion compute
+  bastion_vol:
+    type: OS::Cinder::Volume
+    properties:
+#      size: { get_param: bastion_vol_size }
+#      image: { get_param: bastion_image }
+#      volume_type: { get_param: bastion_vol_type }
+      volume_type: { get_param: bastion_vol_type }
+      source_volid: { get_param: source_volid }
+
+  bastion:
+    type: OS::Nova::Server
+    properties:
+      flavor: { get_param: bastion_flavor }
+      key_name: { get_param: key_name }
+      networks:
+        - port: { get_resource: bastion_port }
+      block_device_mapping:
+        - device_name: vda
+          volume_id: { get_resource: bastion_vol }
+          delete_on_termination: true
+      user_data_format: RAW
+      user_data: { get_resource: postinstall_bastion }
+      user_data_update_policy: IGNORE
+
+  bastion_lien_floatingip:
+    type: OS::Neutron::FloatingIPAssociation
+    properties:
+      floatingip_id: { get_param: floatingip_id_bastion }
+      port_id: { get_resource: bastion_port }
+
+  postinstall_bastion:
+    type: "OS::Heat::MultipartMime"
+    properties:
+      parts:
+        - config: { get_resource: included_files }
+        - config: { get_resource: bastion_ssh_postconf }
+        - config: { get_resource: bastion_postconf }
+        - config: { get_resource: configure_logs }
+
+  bastion_ssh_postconf:
+    type: "OS::Heat::SoftwareConfig"
+    properties:
+      group: ungrouped
+      config:
+        str_replace:
+          template: { get_file: config-scripts/genere_custom_ssh_key.sh }
+          params:
+            $deploy_ssh_public_key: { get_param: deploy_ssh_public_key }
+            $deploy_ssh_private_key: { get_param: deploy_ssh_private_key }
+
+  bastion_postconf:
+    type: "OS::Heat::SoftwareConfig"
+    properties:
+      group: ungrouped
+      config:
+        str_replace:
+          template: { get_file: config-scripts/bastion_postconf.sh }
+          params:
+            $ssh_authorized_keys: { get_param: ssh_authorized_keys }
+            $no_proxy: { get_param: no_proxy }
+
+  included_files:
+    type: "OS::Heat::CloudConfig"
+    properties:
+      cloud_config:
+        merge_how: dict(recurse_array)+list(append)
+        write_files:
+        - path: /home/debian/common_functions.sh
+          permissions: 0700
+          content:
+            str_replace:
+              params:
+                $wc_notify: {get_attr: [wait_handle, curl_cli]}
+              template: { get_file: config-scripts/common_functions.sh }
+
+  configure_logs:
+    type: "OS::Heat::SoftwareConfig"
+    properties:
+      group: ungrouped
+      config:
+        str_replace:
+          template: { get_file: config-scripts/configure_logs.sh }
+          params:
+            $syslog_relay: {get_param: syslog_relay}
+
+outputs:
+  bastion_id:
+    description: bastion id
+    value: { get_resource: bastion }
+  bastion_private_ip_address:
+    value: {get_attr: [bastion, networks, {get_param: front_network}, 0] }
+  bastion_public_ip_address:
+    value: {get_attr: [bastion, networks, {get_param: front_network}, 1] }

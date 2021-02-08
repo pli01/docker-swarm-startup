@@ -1,0 +1,261 @@
+heat_template_version: "2015-10-15"
+
+description: Template that installs a HAProxy server.
+
+parameters:
+  image:
+    type: string
+    label: Image name or ID
+    description: Image to be used for server. Please use an Ubuntu based image.
+    default: trusty-server-cloudimg-amd64
+  flavor:
+    type: string
+    label: Flavor
+    description: Type of instance (flavor) to be used on the compute instance.
+    default: m1.small
+  vol_size:
+    type: number
+    description: The size of the Cinder root volume for instance
+    default: 10
+  vol_type:
+    type: string
+    description: The volume type of the Cinder volume for instance
+    default: default
+  key_name:
+    type: string
+    label: Key name
+    description: Name of key-pair to be installed on the compute instance.
+    default: my_key
+
+#  dns_nameservers:
+#    type: comma_delimited_list
+#    label: DNS nameservers
+#    description: dns_nameservers=8.8.8.8,8.8.4.4
+#  lb_subnet_cidr:
+#    type: string
+#    default: "192.168.1.0/24"
+
+  floatingip_network_name:
+    type: string
+  floatingip_id:
+    type: string
+  front_network:
+    type: string
+    constraints:
+      - {custom_constraint: neutron.network}
+  front_subnet:
+    type: string
+    constraints:
+      - {custom_constraint: neutron.subnet}
+
+  ssh_access_cidr:
+    type: string
+    label: IP range that is permitted to SSH to bastion instance
+    description: The CIDR IP range that is permitted to SSH to bastion instance. Note - a value of 0.0.0.0/0 will allow access from ANY IP address.
+    default: "192.168.2.2/32"
+    constraints:
+      - {custom_constraint: net_cidr}
+
+  ssh_authorized_keys:
+    type: comma_delimited_list
+    label: ssh_authorized_keys
+    description: Comma separated list of keypair.
+    default: []
+
+  syslog_relay:
+    type: string
+    label: syslog relay
+    description: syslog relay ip
+    default: ""
+
+# LB configuration backend
+  lb_port:
+    type: number
+    label: Port number
+    description: Port used by the load balancer
+    default: 80
+  servers:
+    type: comma_delimited_list
+    label: Servers
+    description: Comma separated list of servers in the cluster.
+  app_port:
+    type: number
+    label: Port number
+    description: Port number to server.
+    default: 80
+  color:
+    type: string
+    label: stack color (blue/gren)
+    default: blue
+
+resources:
+  # Provide a curl CLI command to the cloud-init script.  Called on completion
+  # to indicate the status of the cloud-init process
+  wait_handle:
+    type: OS::Heat::WaitConditionHandle
+
+  # Wait for the node_boot (cloud-init) process to complete or time out
+  wait_condition:
+    type: OS::Heat::WaitCondition
+    properties:
+      handle: { get_resource: wait_handle }
+      count: 1
+      timeout: 600
+
+
+#  extrouter:
+#    type: OS::Neutron::Router
+#    properties:
+#      external_gateway_info:
+#        network: { get_param: floatingip_network_name }
+#
+#  lb_network:
+#    type: OS::Neutron::Net
+#    properties:
+#      admin_state_up: True
+#      shared: False
+#
+#  lb_subnet:
+#    type: OS::Neutron::Subnet
+#    depends_on: [ lb_network ]
+#    properties:
+#      cidr: {get_param: lb_subnet_cidr}
+#      network_id: {get_resource: lb_network}
+#      dns_nameservers: {get_param: dns_nameservers}
+#      enable_dhcp: True
+#      ip_version: 4
+#
+#  lb_interface:
+#    type: OS::Neutron::RouterInterface
+#    depends_on: [ lb_subnet, extrouter ]
+#    properties:
+#      router_id: { get_resource: extrouter }
+#      subnet_id: { get_resource: lb_subnet }
+#
+  security_group_web:
+      type: OS::Neutron::SecurityGroup
+      properties:
+        rules:
+          - protocol: tcp
+            remote_ip_prefix: 0.0.0.0/0
+            port_range_min: { get_param: lb_port }
+            port_range_max: { get_param: lb_port }
+          - protocol: tcp
+            remote_ip_prefix: { get_param: ssh_access_cidr }
+            port_range_min: 22
+            port_range_max: 22
+            direction: ingress
+
+  port:
+    type: OS::Neutron::Port
+    properties:
+      network: { get_param: front_network }
+      security_groups:
+        - { get_resource: security_group_web }
+      replacement_policy: AUTO
+      fixed_ips:
+        - subnet_id: { get_param: front_subnet }
+
+  floating:
+    type: OS::Neutron::FloatingIPAssociation
+    depends_on: [ port ]
+    properties:
+      floatingip_id: { get_param: floatingip_id }
+      port_id: { get_resource: port }
+
+  root_volume:
+    type: OS::Cinder::Volume
+    properties:
+      image: { get_param: image }
+      size: { get_param: vol_size }
+      volume_type: { get_param: vol_type }
+
+  haproxy_instance:
+    type: OS::Nova::Server
+#    depends_on: [ extrouter, lb_network, lb_interface, lb_subnet, port, root_volume ]
+    properties:
+# Boot on ephemeral disk
+#      image: { get_param: image }
+# Boot on volume
+      block_device_mapping_v2: [{ device_name: "vda", volume_id: { get_resource: root_volume }, delete_on_termination: true }]
+      flavor: { get_param: flavor }
+      key_name: { get_param: key_name }
+      networks:
+        - port: { get_resource: port }
+      metadata:
+        servers: { get_param: servers }
+        port: { get_param: app_port }
+        color: { get_param: color }
+      user_data_format: RAW
+      user_data: { get_resource: postinstall_lb }
+
+  postinstall_lb:
+    type: "OS::Heat::MultipartMime"
+    properties:
+      parts:
+        - config: { get_resource: included_files }
+        - config: { get_resource: start_postconf }
+        - config: { get_resource: lb_postconf }
+        - config: { get_resource: configure_logs }
+        - config: { get_resource: end_postconf }
+
+  included_files:
+    type: "OS::Heat::CloudConfig"
+    properties:
+      cloud_config:
+        merge_how: dict(recurse_array)+list(append)
+        write_files:
+        - path: /home/debian/common_functions.sh
+          permissions: 0700
+          content:
+            str_replace:
+              params:
+                $wc_notify: {get_attr: [wait_handle, curl_cli]}
+              template: { get_file: config-scripts/common_functions.sh }
+
+  start_postconf:
+    type: "OS::Heat::SoftwareConfig"
+    properties:
+      group: ungrouped
+      config:
+        str_replace:
+          template: { get_file: config-scripts/start_postconf.sh }
+          params:
+            $ssh_authorized_keys: { get_param: ssh_authorized_keys }
+
+  configure_logs:
+    type: "OS::Heat::SoftwareConfig"
+    properties:
+      group: ungrouped
+      config:
+        str_replace:
+          template: { get_file: config-scripts/configure_logs.sh }
+          params:
+            $syslog_relay: {get_param: syslog_relay}
+
+  lb_postconf:
+    type: "OS::Heat::SoftwareConfig"
+    properties:
+      group: ungrouped
+      config:
+        str_replace:
+          template: { get_file: config-scripts/lb_postconf.sh }
+          params:
+            __port__: { get_param: lb_port }
+
+  end_postconf:
+    type: "OS::Heat::SoftwareConfig"
+    properties:
+      group: ungrouped
+      config: { get_file: config-scripts/end_postconf.sh }
+
+outputs:
+  name:
+    description: Name of the HAProxy instance.
+    value: { get_attr: [haproxy_instance, name] }
+  ip:
+    description: The IP address of the HAProxy instance.
+    value: { get_attr: [haproxy_instance, first_address] }
+  port:
+    description: The network port of the HAProxy instance.
+    value: { get_resource: port }
